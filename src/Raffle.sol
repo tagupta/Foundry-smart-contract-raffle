@@ -1,43 +1,107 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
+import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
+
 /**
  * @title A sample raffle contract
  * @author Tanu Gupta
  * @notice This contract is for creating a sample raffle
  * @dev Implements Chainlink VRF2.5
  */
-contract Raffle{
+contract Raffle is VRFConsumerBaseV2Plus {
     /* Errors */
     error Raffle__SendMoreToEnterRaffle();
+    error Raffle__RaffleNotEndedYet();
+    error Raffle__WinnerTransferFailed();
 
-    uint private immutable i_entranceFee;
-    address payable [] private s_players;
-    
+    /* Type Declarations */
+    enum RaffleState{
+        OPEN,
+        CALCULATING
+    }
+    /* State variables */
+    uint16 private constant REQUEST_CONFIRMATIONS = 3;
+    uint16 private constant NUM_WORDS = 1;
+
+    bytes32 private immutable i_KeyHash;
+    uint256 private immutable i_entranceFee;
+    //@dev the duration of the lottery in seconds
+    uint256 private immutable i_interval;
+    uint256 private immutable i_subscriptionID;
+    uint32 private immutable i_callbackGasLimit;
+
+    uint256 private s_lastTimeStamp;
+    address payable[] private s_players;
+    address payable private s_recentWinner;
+
     /* Events */
     event RaffleEntered(address indexed player);
 
-    constructor(uint _entranceFee) {
+    constructor(
+        uint256 _entranceFee,
+        uint256 interval,
+        address vrfCoordinator,
+        bytes32 gasLane,
+        uint256 subscriptionID,
+        uint32 callbackGasLimit
+    ) VRFConsumerBaseV2Plus(vrfCoordinator) {
         i_entranceFee = _entranceFee;
+        i_interval = interval;
+        s_lastTimeStamp = block.timestamp;
+        i_KeyHash = gasLane;
+        i_subscriptionID = subscriptionID;
+        i_callbackGasLimit = callbackGasLimit;
     }
-    
+
     /**
      * dev: Need users to enter this raffle by adding some entrance fee.
      */
-    function enterRaffle() payable external{
-        if(msg.value < i_entranceFee) revert Raffle__SendMoreToEnterRaffle();
+    function enterRaffle() external payable {
+        if (msg.value < i_entranceFee) revert Raffle__SendMoreToEnterRaffle();
         //Adding custom error to require statements
         // require(msg.value >= i_entranceFee, SendMoreToEnterRaffle());
         s_players.push(payable(msg.sender));
         emit RaffleEntered(msg.sender);
     }
 
+    /**
+     * @dev check whether the raffle has ended or not?
+     * @dev Pick a random number to be less than the size of players array.
+     * @dev Using that number, select that random winner.
+     * @dev This function has to be called automatically.
+     */
     function pickWinners() external {
+        if ((block.timestamp - s_lastTimeStamp) < i_interval) revert Raffle__RaffleNotEndedYet();
+        //Getting the random numbers:
+        //1. Request RNG -> chainlink coordinator automatically calls the fulfillRandomWords() as a callback function.
+        //2. Get RNG.
+        VRFV2PlusClient.RandomWordsRequest memory request = VRFV2PlusClient.RandomWordsRequest({
+            keyHash: i_KeyHash, //gas price
+            subId: i_subscriptionID,
+            requestConfirmations: REQUEST_CONFIRMATIONS,
+            callbackGasLimit: i_callbackGasLimit, //gas limit
+            numWords: NUM_WORDS,
+            extraArgs: VRFV2PlusClient._argsToBytes(VRFV2PlusClient.ExtraArgsV1({nativePayment: false}))
+        });
+
+        uint256 requestId = s_vrfCoordinator.requestRandomWords(request);
     }
 
-    /**Getter Functions */
-    function getEntranceFee() external view returns(uint){
+    function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) internal override {
+        //Find the index of the random winner using the random number.
+        uint indexOfwinner = randomWords[0] % s_players.length; //0 - (s_players.length - 1);
+        s_recentWinner = s_players[indexOfwinner];
+        //Pay the winner
+        (bool success, ) = s_recentWinner.call{value: address(this).balance}("");
+        if(!success) revert Raffle__WinnerTransferFailed();
+    }
+
+    /**
+     * Getter Functions
+     */
+    function getEntranceFee() external view returns (uint256) {
         return i_entranceFee;
     }
-
 }
