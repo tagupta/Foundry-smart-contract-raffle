@@ -4,19 +4,21 @@ pragma solidity ^0.8.0;
 import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
 import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
 
+
 /**
  * @title A sample raffle contract
  * @author Tanu Gupta
  * @notice This contract is for creating a sample raffle
  * @dev Implements Chainlink VRF2.5
  */
-contract Raffle is VRFConsumerBaseV2Plus {
+contract Raffle is VRFConsumerBaseV2Plus{
     /* Errors */
     error Raffle__SendMoreToEnterRaffle();
     error Raffle__RaffleNotEndedYet();
     error Raffle__WinnerTransferFailed();
     error Raffle__RaffleNotOpen();
     error Raffle__CalculatingRecentWinner();
+    error Raffle__UpKeepNotNeeded(uint balance, uint playersLength, uint raffleState);
 
     /* Type Declarations */
     enum RaffleState {
@@ -78,13 +80,42 @@ contract Raffle is VRFConsumerBaseV2Plus {
     }
 
     /**
+     * @dev Automating the process of picking up winners using Chainlink automation
+     * @dev this function will be called by the Automation network nodes to see if lottery is ready to have a winner
+     * @dev the following should be true in order for upkeepNeeded to be true:
+     * 1. The time inetrval has passed bewteen raffle runs.
+     * 2. The lottery is in OPEN state.
+     * 3. The contract has ETH deposited.
+     * 4. The contract has players entered the raffle
+     * 5. Implicitly, your subscription has LINK.
+     * @param - ignored 
+     * @return upkeepNeeded boolean to suggest when should the winner be picked.
+     * @return - ignored
+     */
+       function checkUpkeep(
+        bytes memory /* checkData */
+    )
+        public
+        view
+        returns (bool upkeepNeeded, bytes memory /* performData */)
+    {
+        bool hasTimePassed = (block.timestamp - s_lastTimeStamp) >= i_interval;
+        bool isOpen = s_raffleState == RaffleState.OPEN;
+        bool hasBalance = address(this).balance > 0;
+        bool hasPlayers = s_players.length > 0;
+        upkeepNeeded =  hasTimePassed && isOpen && hasBalance && hasPlayers;
+        return (upkeepNeeded, "");
+    }
+
+    /**
      * @dev check whether the raffle has ended or not?
      * @dev Pick a random number to be less than the size of players array.
      * @dev Using that number, select that random winner.
      * @dev This function has to be called automatically.
      */
-    function pickWinners() external {
-        if ((block.timestamp - s_lastTimeStamp) < i_interval) revert Raffle__RaffleNotEndedYet();
+    function performUpkeep(bytes calldata /* performData */) external {
+        (bool upkeepNeeded, ) = checkUpkeep("");
+        if(!upkeepNeeded) revert Raffle__UpKeepNotNeeded(address(this).balance, s_players.length, uint256(s_raffleState));
         //Getting the random numbers:
         //1. Request RNG -> chainlink coordinator automatically calls the fulfillRandomWords() as a callback function.
         //2. Get RNG.
@@ -103,18 +134,21 @@ contract Raffle is VRFConsumerBaseV2Plus {
 
     function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) internal override{
         //Find the index of the random winner using the random number.
+
+        // Effect (Internal contract state changes)
         uint256 indexOfwinner = randomWords[0] % s_players.length; //0 - (s_players.length - 1);
         address payable recentWinner = s_players[indexOfwinner];
         s_recentWinner = recentWinner;
         s_raffleState = RaffleState.OPEN;
-        // Effect
         s_players = new address payable[](0);
         s_lastTimeStamp = block.timestamp;
-        //Interaction
+        emit WinnerPicked(recentWinner);
+
+        //Interaction (External contract changes)
         (bool success,) = recentWinner.call{value: address(this).balance}("");
         if (!success) revert Raffle__WinnerTransferFailed();
 
-        emit WinnerPicked(recentWinner);
+        
     }
 
     /**
