@@ -15,13 +15,16 @@ contract Raffle is VRFConsumerBaseV2Plus {
     error Raffle__SendMoreToEnterRaffle();
     error Raffle__RaffleNotEndedYet();
     error Raffle__WinnerTransferFailed();
+    error Raffle__RaffleNotOpen();
+    error Raffle__CalculatingRecentWinner();
 
     /* Type Declarations */
-    enum RaffleState{
+    enum RaffleState {
         OPEN,
         CALCULATING
     }
     /* State variables */
+
     uint16 private constant REQUEST_CONFIRMATIONS = 3;
     uint16 private constant NUM_WORDS = 1;
 
@@ -35,9 +38,11 @@ contract Raffle is VRFConsumerBaseV2Plus {
     uint256 private s_lastTimeStamp;
     address payable[] private s_players;
     address payable private s_recentWinner;
+    RaffleState private s_raffleState;
 
     /* Events */
     event RaffleEntered(address indexed player);
+    event WinnerPicked(address indexed winner);
 
     constructor(
         uint256 _entranceFee,
@@ -53,15 +58,21 @@ contract Raffle is VRFConsumerBaseV2Plus {
         i_KeyHash = gasLane;
         i_subscriptionID = subscriptionID;
         i_callbackGasLimit = callbackGasLimit;
+
+        s_raffleState = RaffleState.OPEN;
     }
 
     /**
      * dev: Need users to enter this raffle by adding some entrance fee.
+     * Enter raffle if only the state is open, revert if the state is calculating;
      */
-    function enterRaffle() external payable {
+    modifier isRaffleOpen() {
+        if (s_raffleState != RaffleState.OPEN) revert Raffle__RaffleNotOpen();
+        _;
+    }
+
+    function enterRaffle() external payable isRaffleOpen {
         if (msg.value < i_entranceFee) revert Raffle__SendMoreToEnterRaffle();
-        //Adding custom error to require statements
-        // require(msg.value >= i_entranceFee, SendMoreToEnterRaffle());
         s_players.push(payable(msg.sender));
         emit RaffleEntered(msg.sender);
     }
@@ -77,6 +88,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
         //Getting the random numbers:
         //1. Request RNG -> chainlink coordinator automatically calls the fulfillRandomWords() as a callback function.
         //2. Get RNG.
+         s_raffleState = RaffleState.CALCULATING;
         VRFV2PlusClient.RandomWordsRequest memory request = VRFV2PlusClient.RandomWordsRequest({
             keyHash: i_KeyHash, //gas price
             subId: i_subscriptionID,
@@ -89,13 +101,20 @@ contract Raffle is VRFConsumerBaseV2Plus {
         uint256 requestId = s_vrfCoordinator.requestRandomWords(request);
     }
 
-    function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) internal override {
+    function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) internal override{
         //Find the index of the random winner using the random number.
-        uint indexOfwinner = randomWords[0] % s_players.length; //0 - (s_players.length - 1);
-        s_recentWinner = s_players[indexOfwinner];
-        //Pay the winner
-        (bool success, ) = s_recentWinner.call{value: address(this).balance}("");
-        if(!success) revert Raffle__WinnerTransferFailed();
+        uint256 indexOfwinner = randomWords[0] % s_players.length; //0 - (s_players.length - 1);
+        address payable recentWinner = s_players[indexOfwinner];
+        s_recentWinner = recentWinner;
+        s_raffleState = RaffleState.OPEN;
+        // Effect
+        s_players = new address payable[](0);
+        s_lastTimeStamp = block.timestamp;
+        //Interaction
+        (bool success,) = recentWinner.call{value: address(this).balance}("");
+        if (!success) revert Raffle__WinnerTransferFailed();
+
+        emit WinnerPicked(recentWinner);
     }
 
     /**
