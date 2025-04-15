@@ -16,7 +16,6 @@ contract Raffle is VRFConsumerBaseV2Plus {
     error Raffle__RaffleNotEndedYet();
     error Raffle__WinnerTransferFailed();
     error Raffle__RaffleNotOpen();
-    error Raffle__CalculatingRecentWinner();
     error Raffle__UpKeepNotNeeded(uint256 balance, uint256 playersLength, uint256 raffleState);
 
     /* Type Declarations */
@@ -55,11 +54,10 @@ contract Raffle is VRFConsumerBaseV2Plus {
     ) VRFConsumerBaseV2Plus(vrfCoordinator) {
         i_entranceFee = _entranceFee;
         i_interval = interval;
-        s_lastTimeStamp = block.timestamp;
         i_KeyHash = gasLane;
         i_subscriptionID = subscriptionID;
         i_callbackGasLimit = callbackGasLimit;
-
+        s_lastTimeStamp = block.timestamp;
         s_raffleState = RaffleState.OPEN;
     }
 
@@ -153,5 +151,17 @@ contract Raffle is VRFConsumerBaseV2Plus {
      */
     function getEntranceFee() external view returns (uint256) {
         return i_entranceFee;
+    }
+
+    function getRaffleState() external view returns (RaffleState) {
+        return s_raffleState;
+    }
+
+    function getPlayersArray() external view returns (address payable[] memory) {
+        return s_players;
+    }
+
+    function getPlayer(uint256 index) external view returns (address payable) {
+        return s_players[index];
     }
 }
