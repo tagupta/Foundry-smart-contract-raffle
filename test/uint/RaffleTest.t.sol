@@ -88,10 +88,10 @@ contract RaffleTest is Test {
         vm.roll(block.number + 1);
 
         raffle.performUpkeep(""); //<-
-        // assert(raffle.getRaffleState() == Raffle.RaffleState.CALCULATING);
+            // assert(raffle.getRaffleState() == Raffle.RaffleState.CALCULATING);
 
-        // vm.prank(PLAYER);
-        // vm.expectRevert(Raffle.Raffle__RaffleNotOpen.selector);
-        // raffle.enterRaffle{value: STARTING_PLAYER_BALANCE}();
+        vm.prank(PLAYER);
+        vm.expectRevert(Raffle.Raffle__RaffleNotOpen.selector);
+        raffle.enterRaffle{value: entranceFee}();
     }
 }

@@ -5,6 +5,8 @@ import {Script, console} from "forge-std/Script.sol";
 import {HelperConfig, CodeConstants} from "script/HelperConfig.s.sol";
 import {VRFCoordinatorV2_5Mock} from "@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2_5Mock.sol";
 import {LinkToken} from "test/mocks/LinkToken.sol";
+import {Raffle} from "src/Raffle.sol";
+import {DevOpsTools} from "lib/foundry-devops/src/DevOpsTools.sol";
 
 /**
  * @title Creating dynamic subscriptions
@@ -56,11 +58,35 @@ contract FundSubscriptions is Script, CodeConstants {
             // LinkToken(linkToken).mint(address(this), FUND_AMOUNT);
             VRFCoordinatorV2_5Mock(vrfCoordinator).fundSubscription(subscriptionID, FUND_AMOUNT);
             vm.stopBroadcast();
-        }
-        else {
+        } else {
             vm.startBroadcast();
-            LinkToken(linkToken).transferAndCall(vrfCoordinator,FUND_AMOUNT, abi.encode(subscriptionID));
+            LinkToken(linkToken).transferAndCall(vrfCoordinator, FUND_AMOUNT, abi.encode(subscriptionID));
             vm.stopBroadcast();
         }
+    }
+}
+
+contract AddConsumer is Script {
+    function run() external {
+        address contractAddress = DevOpsTools.get_most_recent_deployment("Raffle", block.chainid);
+        Raffle raffle = Raffle(contractAddress);
+        addConsumerUsingConfig(address(raffle));
+    }
+
+    function addConsumerUsingConfig(address consumer) public {
+        HelperConfig helperConfig = new HelperConfig();
+        address vrfCoordinator = helperConfig.getConfig().vrfCoordinator;
+        uint256 subscriptionID = helperConfig.getConfig().subscriptionID;
+
+        addConsumer(vrfCoordinator, subscriptionID, consumer);
+    }
+
+    function addConsumer(address vrfCoordinator, uint256 subscriptionID, address consumer) public {
+        console.log("Adding consumer to VRF Coordinator: ", vrfCoordinator);
+        console.log("subscriptionID: ", subscriptionID);
+        console.log("Consumer to add subscription for: ", consumer);
+        vm.startBroadcast();
+        VRFCoordinatorV2_5Mock(vrfCoordinator).addConsumer(subscriptionID, consumer);
+        vm.stopBroadcast();
     }
 }
