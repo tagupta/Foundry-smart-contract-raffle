@@ -62,8 +62,8 @@ contract Raffle is VRFConsumerBaseV2Plus {
     }
 
     /**
-     * dev: Need users to enter this raffle by adding some entrance fee.
-     * Enter raffle if only the state is open, revert if the state is calculating;
+     * @dev Need users to enter this raffle by adding some entrance fee.
+     * @dev Enter raffle if only the state is open, revert if the state is calculating;
      */
     modifier isRaffleOpen() {
         if (s_raffleState != RaffleState.OPEN) revert Raffle__RaffleNotOpen();

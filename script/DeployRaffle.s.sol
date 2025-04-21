@@ -24,7 +24,9 @@ contract DeployRaffle is Script {
 
             //Funding the subscription
             FundSubscriptions fundSubscriptions = new FundSubscriptions();
-            fundSubscriptions.fundSubscription(networkConfig.vrfCoordinator, networkConfig.subscriptionID, networkConfig.link);
+            fundSubscriptions.fundSubscription(
+                networkConfig.vrfCoordinator, networkConfig.subscriptionID, networkConfig.link
+            );
         }
         vm.startBroadcast();
         Raffle raffle = new Raffle({
@@ -36,7 +38,7 @@ contract DeployRaffle is Script {
             callbackGasLimit: networkConfig.callbackGasLimit
         });
         vm.stopBroadcast();
-        
+
         //Add consumer
         AddConsumer addConsumer = new AddConsumer();
         addConsumer.addConsumer(networkConfig.vrfCoordinator, networkConfig.subscriptionID, address(raffle));
