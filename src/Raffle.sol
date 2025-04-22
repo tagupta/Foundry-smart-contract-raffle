@@ -7,7 +7,7 @@ import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/V
 /**
  * @title A sample raffle contract
  * @author Tanu Gupta
- * @notice This contract is for creating a sample raffle
+ * @notice This contract is for creating a sample raffle system using chainlink automation and randomization
  * @dev Implements Chainlink VRF2.5
  */
 contract Raffle is VRFConsumerBaseV2Plus {
@@ -23,15 +23,14 @@ contract Raffle is VRFConsumerBaseV2Plus {
         OPEN,
         CALCULATING
     }
-    /* State variables */
 
+    /* State variables */
     uint16 private constant REQUEST_CONFIRMATIONS = 3;
     uint16 private constant NUM_WORDS = 1;
 
     bytes32 private immutable i_KeyHash;
     uint256 private immutable i_entranceFee;
-    //@dev the duration of the lottery in seconds
-    uint256 private immutable i_interval;
+    uint256 private immutable i_interval; //@dev the duration of the lottery in seconds
     uint256 private immutable i_subscriptionID;
     uint32 private immutable i_callbackGasLimit;
 
@@ -166,12 +165,12 @@ contract Raffle is VRFConsumerBaseV2Plus {
     function getPlayer(uint256 index) external view returns (address payable) {
         return s_players[index];
     }
-    
-    function getTimeStamp() external view returns(uint256){
+
+    function getTimeStamp() external view returns (uint256) {
         return s_lastTimeStamp;
     }
 
-    function getRecentWinner() external view returns(address){
+    function getRecentWinner() external view returns (address) {
         return s_recentWinner;
     }
 }
